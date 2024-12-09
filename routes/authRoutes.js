@@ -1,14 +1,29 @@
 const express = require('express');
 const User = require('../model/User');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const authenticateToken = require('../authenticateToken');
+
+const SECRET_KEY = '123'; 
 
 const router = express.Router();
 
 // Create a new user
 router.post('/create-user', async (req, res) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(req.body.email)) {
+    return res.status(400).json({ message: 'Invalid email format' });
+  }
+
+
   try {
-    const newUser = new User(req.body);
-    await newUser.save();
-    res.status(201).json(newUser);
+    if (req.body.phone.length === 10) {
+      const newUser = new User(req.body);
+      await newUser.save();
+      res.status(201).json(newUser);
+    }else{
+      return res.status(400).json({ message: 'phone number is not valid' });
+    }
   } catch (error) {
     if (error.errorResponse.code === 11000) {
       res.status(400).json({ error: "duplicate phone or email" });
@@ -19,8 +34,9 @@ router.post('/create-user', async (req, res) => {
 });
 
 // Get all users
-router.get('/users', async (req, res) => {
+router.get('/users',authenticateToken, async (req, res) => {
   const { phone } = req.query; // Extract the phone number from query parameters
+
   if (phone) {
     try {
       const user = await User.findOne({ phone });
@@ -93,6 +109,39 @@ router.patch('/users', async (req, res) => {
   }
 });
 
+//forgot password for user
+router.post('/forgotpassword', async (req, res) => {
+  const { phone, city } = req.body; // Extract the phone number from query parameters
+  
+    try {
+      const user = await User.findOne({ phone, city });
+      if (user) {
+        res.status(200).json({"password": user.password});
+      } else {
+        res.status(404).json({ message: 'No user found ' });
+      }
+    }
+    catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
 
+//login api
+router.post('/login', async (req, res) => {
+  const { phone, password } = req.body; // Extract the phone number from query parameters
+  
+    try {
+      const user = await User.findOne({ phone, password});
+      if (user) {
+        const token = jwt.sign({ userId: user.phone }, SECRET_KEY, { expiresIn: '2m' });
+        res.status(200).json({ message: `Hello ${user.firstName}`, token : token});
+      } else {
+        res.status(404).json({ message: 'Authentication failed' });
+      }
+    }
+    catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
 
 module.exports = router;
